@@ -1,0 +1,31 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  author     String
+  rating     Int
+  content    String
+  sentiment  String   @default("neutral") // positive, negative, neutral
+  confidence Float    @default(0)
+  topics     String   @default("[]") // JSON array of topic strings
+  keywords   String   @default("[]") // JSON array of keyword strings
+  source     String   @default("manual") // manual, csv, api
+  productName String  @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

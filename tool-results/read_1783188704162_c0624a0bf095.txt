@@ -1,0 +1,1133 @@
+     1→"use client";
+     2→
+     3→import React, { useState, useEffect, useCallback } from "react";
+     4→import { motion, AnimatePresence } from "framer-motion";
+     5→import { useTheme } from "next-themes";
+     6→import {
+     7→  BarChart3, MessageSquarePlus, TrendingUp, Search, Star, ThumbsUp, ThumbsDown,
+     8→  Minus, Download, Upload, Trash2, RefreshCw, Filter, Sparkles, Globe,
+     9→  PieChart as PieChartIcon, Activity, Eye, BrainCircuit, ChevronDown,
+    10→  Sun, Moon, LayoutDashboard, MessageSquareText, BarChart2, Tag, X, ArrowUpRight, ArrowDownRight
+    11→} from "lucide-react";
+    12→import { Button } from "@/components/ui/button";
+    13→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+    14→import { Input } from "@/components/ui/input";
+    15→import { Textarea } from "@/components/ui/textarea";
+    16→import { Badge } from "@/components/ui/badge";
+    17→import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+    18→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+    19→import { Progress } from "@/components/ui/progress";
+    20→import { ScrollArea } from "@/components/ui/scroll-area";
+    21→import { Skeleton } from "@/components/ui/skeleton";
+    22→import {
+    23→  ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent,
+    24→} from "@/components/ui/chart";
+    25→import {
+    26→  BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, AreaChart, Area,
+    27→  ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, Radar,
+    28→} from "recharts";
+    29→
+    30→// ─── Types ───
+    31→interface Review {
+    32→  id: string;
+    33→  author: string;
+    34→  rating: number;
+    35→  content: string;
+    36→  sentiment: string;
+    37→  confidence: number;
+    38→  topics: string;
+    39→  keywords: string;
+    40→  source: string;
+    41→  productName: string;
+    42→  createdAt: string;
+    43→}
+    44→
+    45→interface Stats {
+    46→  totalReviews: number;
+    47→  avgRating: number;
+    48→  nps: number;
+    49→  sentimentCounts: { positive: number; negative: number; neutral: number };
+    50→  sentimentPcts: { positive: number; negative: number; neutral: number };
+    51→  ratingDist: { rating: number; count: number }[];
+    52→  productStats: { name: string; count: number; avgRating: number; positivePct: number; negativePct: number; neutralPct: number }[];
+    53→  topicStats: { name: string; count: number }[];
+    54→  keywordStats: { text: string; value: number }[];
+    55→  avgConfidence: number;
+    56→  trendData: { date: string; sentiment: number; rating: number }[];
+    57→}
+    58→
+    59→// ─── Color Palette ───
+    60→const COLORS = {
+    61→  positive: "hsl(142, 71%, 45%)",
+    62→  negative: "hsl(0, 84%, 60%)",
+    63→  neutral: "hsl(215, 20%, 55%)",
+    64→  accent: "hsl(280, 67%, 52%)",
+    65→  chart1: "hsl(142, 71%, 45%)",
+    66→  chart2: "hsl(0, 84%, 60%)",
+    67→  chart3: "hsl(215, 20%, 55%)",
+    68→  chart4: "hsl(45, 93%, 47%)",
+    69→  chart5: "hsl(280, 67%, 52%)",
+    70→};
+    71→
+    72→const CHART_CONFIG = {
+    73→  positive: { label: "Positive", color: COLORS.chart1 },
+    74→  negative: { label: "Negative", color: COLORS.chart2 },
+    75→  neutral: { label: "Neutral", color: COLORS.chart3 },
+    76→  count: { label: "Count", color: COLORS.chart4 },
+    77→  rating: { label: "Rating", color: COLORS.chart5 },
+    78→};
+    79→
+    80→// ─── Animation Variants ───
+    81→const fadeInUp = {
+    82→  initial: { opacity: 0, y: 20 },
+    83→  animate: { opacity: 1, y: 0 },
+    84→  transition: { duration: 0.4, ease: "easeOut" },
+    85→};
+    86→
+    87→const staggerContainer = {
+    88→  animate: { transition: { staggerChildren: 0.08 } },
+    89→};
+    90→
+    91→// ─── Star Rating Component ───
+    92→function StarRating({ rating, size = 14 }: { rating: number; size?: number }) {
+    93→  return (
+    94→    <div className="flex items-center gap-0.5">
+    95→      {[1, 2, 3, 4, 5].map((star) => (
+    96→        <Star
+    97→          key={star}
+    98→          size={size}
+    99→          className={
+   100→            star <= rating
+   101→              ? "fill-amber-400 text-amber-400"
+   102→              : "fill-muted text-muted"
+   103→          }
+   104→        />
+   105→      ))}
+   106→    </div>
+   107→  );
+   108→}
+   109→
+   110→// ─── Sentiment Badge ───
+   111→function SentimentBadge({ sentiment, confidence }: { sentiment: string; confidence: number }) {
+   112→  const config = {
+   113→    positive: { icon: ThumbsUp, class: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
+   114→    negative: { icon: ThumbsDown, class: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/20" },
+   115→    neutral: { icon: Minus, class: "bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/20" },
+   116→  };
+   117→  const c = config[sentiment as keyof typeof config] || config.neutral;
+   118→  const Icon = c.icon;
+   119→  return (
+   120→    <Badge variant="outline" className={`${c.class} gap-1 text-xs font-medium`}>
+   121→      <Icon size={12} />
+   122→      {sentiment}
+   123→      <span className="opacity-60">({Math.round(confidence * 100)}%)</span>
+   124→    </Badge>
+   125→  );
+   126→}
+   127→
+   128→// ─── Metric Card ───
+   129→function MetricCard({ title, value, subtitle, icon: Icon, trend, color = "default" }: {
+   130→  title: string; value: string | number; subtitle?: string;
+   131→  icon: React.ElementType; trend?: "up" | "down" | "neutral"; color?: string;
+   132→}) {
+   133→  const colorMap: Record<string, string> = {
+   134→    default: "bg-primary/10 text-primary",
+   135→    emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+   136→    red: "bg-red-500/10 text-red-600 dark:text-red-400",
+   137→    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+   138→    violet: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+   139→  };
+   140→  return (
+   141→    <motion.div {...fadeInUp}>
+   142→      <Card className="hover:shadow-md transition-shadow">
+   143→        <CardContent className="p-4 md:p-6">
+   144→          <div className="flex items-start justify-between">
+   145→            <div className="space-y-1">
+   146→              <p className="text-sm text-muted-foreground font-medium">{title}</p>
+   147→              <p className="text-2xl md:text-3xl font-bold tracking-tight">{value}</p>
+   148→              {subtitle && (
+   149→                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+   150→                  {trend === "up" && <ArrowUpRight size={14} className="text-emerald-500" />}
+   151→                  {trend === "down" && <ArrowDownRight size={14} className="text-red-500" />}
+   152→                  {subtitle}
+   153→                </div>
+   154→              )}
+   155→            </div>
+   156→            <div className={`p-2.5 rounded-xl ${colorMap[color] || colorMap.default}`}>
+   157→              <Icon size={20} />
+   158→            </div>
+   159→          </div>
+   160→        </CardContent>
+   161→      </Card>
+   162→    </motion.div>
+   163→  );
+   164→}
+   165→
+   166→// ─── Word Cloud Component ───
+   167→function WordCloud({ words }: { words: { text: string; value: number }[] }) {
+   168→  if (!words.length) return null;
+   169→  const maxVal = Math.max(...words.map(w => w.value));
+   170→  const minVal = Math.min(...words.map(w => w.value));
+   171→  const range = maxVal - minVal || 1;
+   172→
+   173→  const getColor = (val: number) => {
+   174→    const ratio = (val - minVal) / range;
+   175→    if (ratio > 0.7) return "text-emerald-500 dark:text-emerald-400";
+   176→    if (ratio > 0.4) return "text-amber-500 dark:text-amber-400";
+   177→    return "text-slate-500 dark:text-slate-400";
+   178→  };
+   179→
+   180→  const getSize = (val: number) => {
+   181→    const ratio = (val - minVal) / range;
+   182→    if (ratio > 0.7) return "text-2xl md:text-3xl font-bold";
+   183→    if (ratio > 0.5) return "text-xl md:text-2xl font-semibold";
+   184→    if (ratio > 0.3) return "text-lg md:text-xl font-medium";
+   185→    return "text-base md:text-lg font-normal";
+   186→  };
+   187→
+   188→  return (
+   189→    <div className="flex flex-wrap items-center justify-center gap-3 p-4">
+   190→      {words.slice(0, 30).map((w, i) => (
+   191→        <motion.span
+   192→          key={w.text}
+   193→          initial={{ opacity: 0, scale: 0.5 }}
+   194→          animate={{ opacity: 1, scale: 1 }}
+   195→          transition={{ delay: i * 0.03, duration: 0.3 }}
+   196→          className={`${getSize(w.value)} ${getColor(w.value)} cursor-default hover:opacity-80 transition-opacity`}
+   197→          title={`${w.text}: ${w.value} mentions`}
+   198→        >
+   199→          {w.text}
+   200→        </motion.span>
+   201→      ))}
+   202→    </div>
+   203→  );
+   204→}
+   205→
+   206→// ─── Review Card Component ───
+   207→function ReviewCard({ review, onDelete }: { review: Review; onDelete: (id: string) => void }) {
+   208→  const topics = JSON.parse(review.topics || "[]") as string[];
+   209→  const [expanded, setExpanded] = useState(false);
+   210→  const isLong = review.content.length > 150;
+   211→
+   212→  return (
+   213→    <motion.div {...fadeInUp} layout>
+   214→      <Card className="group hover:shadow-md transition-all">
+   215→        <CardContent className="p-4 md:p-5">
+   216→          <div className="flex items-start justify-between gap-3">
+   217→            <div className="flex items-center gap-3 min-w-0">
+   218→              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-sm font-bold text-primary shrink-0">
+   219→                {review.author.charAt(0)}
+   220→              </div>
+   221→              <div className="min-w-0">
+   222→                <p className="font-semibold text-sm truncate">{review.author}</p>
+   223→                <div className="flex items-center gap-2 mt-0.5">
+   224→                  <StarRating rating={review.rating} size={12} />
+   225→                  {review.productName && (
+   226→                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 truncate max-w-[120px]">
+   227→                      {review.productName}
+   228→                    </Badge>
+   229→                  )}
+   230→                </div>
+   231→              </div>
+   232→            </div>
+   233→            <div className="flex items-center gap-2 shrink-0">
+   234→              <SentimentBadge sentiment={review.sentiment} confidence={review.confidence} />
+   235→              <Button
+   236→                variant="ghost"
+   237→                size="icon"
+   238→                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+   239→                onClick={() => onDelete(review.id)}
+   240→              >
+   241→                <Trash2 size={14} />
+   242→              </Button>
+   243→            </div>
+   244→          </div>
+   245→
+   246→          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+   247→            {isLong && !expanded ? review.content.slice(0, 150) + "..." : review.content}
+   248→            {isLong && (
+   249→              <button
+   250→                onClick={() => setExpanded(!expanded)}
+   251→                className="text-primary hover:underline ml-1 text-xs font-medium"
+   252→              >
+   253→                {expanded ? "Show less" : "Read more"}
+   254→              </button>
+   255→            )}
+   256→          </p>
+   257→
+   258→          {topics.length > 0 && topics[0] !== "General" && (
+   259→            <div className="flex flex-wrap gap-1.5 mt-3">
+   260→              {topics.map((topic) => (
+   261→                <Badge key={topic} variant="outline" className="text-[10px] px-2 py-0">
+   262→                  <Tag size={10} className="mr-1" />
+   263→                  {topic}
+   264→                </Badge>
+   265→              ))}
+   266→            </div>
+   267→          )}
+   268→
+   269→          <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/50">
+   270→            <span className="text-[11px] text-muted-foreground">
+   271→              {new Date(review.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+   272→            </span>
+   273→            <Badge variant="secondary" className="text-[10px] h-5 capitalize">
+   274→              <Globe size={10} className="mr-1" />
+   275→              {review.source}
+   276→            </Badge>
+   277→          </div>
+   278→        </CardContent>
+   279→      </Card>
+   280→    </motion.div>
+   281→  );
+   282→}
+   283→
+   284→// ─── Main Application ───
+   285→export default function ReviewAnalysisAgent() {
+   286→  const { theme, setTheme } = useTheme();
+   287→  const [activeTab, setActiveTab] = useState("dashboard");
+   288→  const [reviews, setReviews] = useState<Review[]>([]);
+   289→  const [stats, setStats] = useState<Stats | null>(null);
+   290→  const [loading, setLoading] = useState(true);
+   291→  const [analyzing, setAnalyzing] = useState(false);
+   292→
+   293→  // Filters
+   294→  const [searchQuery, setSearchQuery] = useState("");
+   295→  const [filterSentiment, setFilterSentiment] = useState("all");
+   296→  const [filterProduct, setFilterProduct] = useState("all");
+   297→  const [sortBy, setSortBy] = useState("newest");
+   298→  const [page, setPage] = useState(1);
+   299→
+   300→  // New review form
+   301→  const [showAddForm, setShowAddForm] = useState(false);
+   302→  const [newAuthor, setNewAuthor] = useState("");
+   303→  const [newRating, setNewRating] = useState(5);
+   304→  const [newContent, setNewContent] = useState("");
+   305→  const [newProduct, setNewProduct] = useState("");
+   306→  const [submitting, setSubmitting] = useState(false);
+   307→
+   308→  const fetchReviews = useCallback(async () => {
+   309→    const params = new URLSearchParams();
+   310→    if (searchQuery) params.set("search", searchQuery);
+   311→    if (filterSentiment !== "all") params.set("sentiment", filterSentiment);
+   312→    if (filterProduct !== "all") params.set("product", filterProduct);
+   313→    params.set("sort", sortBy);
+   314→    params.set("page", page.toString());
+   315→    params.set("limit", "20");
+   316→
+   317→    const res = await fetch(`/api/reviews?${params}`);
+   318→    const data = await res.json();
+   319→    setReviews(data.reviews || []);
+   320→  }, [searchQuery, filterSentiment, filterProduct, sortBy, page]);
+   321→
+   322→  const fetchStats = useCallback(async () => {
+   323→    const res = await fetch("/api/stats");
+   324→    const data = await res.json();
+   325→    setStats(data);
+   326→  }, []);
+   327→
+   328→  useEffect(() => {
+   329→    Promise.all([fetchReviews(), fetchStats()]).finally(() => setLoading(false));
+   330→  }, [fetchReviews, fetchStats]);
+   331→
+   332→  const handleAddReview = async () => {
+   333→    if (!newContent.trim() || !newAuthor.trim()) return;
+   334→    setSubmitting(true);
+   335→    try {
+   336→      await fetch("/api/reviews", {
+   337→        method: "POST",
+   338→        headers: { "Content-Type": "application/json" },
+   339→        body: JSON.stringify({
+   340→          author: newAuthor,
+   341→          rating: newRating,
+   342→          content: newContent,
+   343→          productName: newProduct,
+   344→          source: "manual",
+   345→        }),
+   346→      });
+   347→      setNewAuthor("");
+   348→      setNewContent("");
+   349→      setNewProduct("");
+   350→      setNewRating(5);
+   351→      setShowAddForm(false);
+   352→      fetchReviews();
+   353→      fetchStats();
+   354→    } finally {
+   355→      setSubmitting(false);
+   356→    }
+   357→  };
+   358→
+   359→  const handleDeleteReview = async (id: string) => {
+   360→    await fetch(`/api/reviews?id=${id}`, { method: "DELETE" });
+   361→    fetchReviews();
+   362→    fetchStats();
+   363→  };
+   364→
+   365→  const handleReAnalyze = async () => {
+   366→    setAnalyzing(true);
+   367→    try {
+   368→      await fetch("/api/reviews/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+   369→      fetchReviews();
+   370→      fetchStats();
+   371→    } finally {
+   372→      setAnalyzing(false);
+   373→    }
+   374→  };
+   375→
+   376→  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   377→    const file = e.target.files?.[0];
+   378→    if (!file) return;
+   379→    const text = await file.text();
+   380→    const lines = text.split("\n").filter((l) => l.trim());
+   381→    if (lines.length < 2) return;
+   382→
+   383→    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/"/g, ""));
+   384→    const reviewsData = [];
+   385→
+   386→    for (let i = 1; i < lines.length; i++) {
+   387→      const values = parseCSVLine(lines[i]);
+   388→      const row: Record<string, string> = {};
+   389→      headers.forEach((h, idx) => {
+   390→        row[h] = values[idx] || "";
+   391→      });
+   392→      if (row.content && row.rating) {
+   393→        reviewsData.push({
+   394→          author: row.author || "CSV Import",
+   395→          rating: row.rating,
+   396→          content: row.content,
+   397→          productName: row.product || row.productname || "",
+   398→        });
+   399→      }
+   400→    }
+   401→
+   402→    if (reviewsData.length > 0) {
+   403→      setSubmitting(true);
+   404→      try {
+   405→        await fetch("/api/reviews/analyze", {
+   406→          method: "PUT",
+   407→          headers: { "Content-Type": "application/json" },
+   408→          body: JSON.stringify({ reviews: reviewsData }),
+   409→        });
+   410→        fetchReviews();
+   411→        fetchStats();
+   412→      } finally {
+   413→        setSubmitting(false);
+   414→      }
+   415→    }
+   416→    e.target.value = "";
+   417→  };
+   418→
+   419→  const handleExport = () => {
+   420→    window.open("/api/export", "_blank");
+   421→  };
+   422→
+   423→  // Reset page on filter changes
+   424→  useEffect(() => { setPage(1); }, [searchQuery, filterSentiment, filterProduct, sortBy]);
+   425→
+   426→  if (loading) {
+   427→    return (
+   428→      <div className="min-h-screen bg-background">
+   429→        <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
+   430→          <div className="flex items-center gap-4">
+   431→            <Skeleton className="h-10 w-10 rounded-xl" />
+   432→            <div className="space-y-2">
+   433→              <Skeleton className="h-8 w-64" />
+   434→              <Skeleton className="h-4 w-96" />
+   435→            </div>
+   436→          </div>
+   437→          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   438→            {[...Array(4)].map((_, i) => (
+   439→              <Skeleton key={i} className="h-28 rounded-xl" />
+   440→            ))}
+   441→          </div>
+   442→          <Skeleton className="h-80 rounded-xl" />
+   443→          <Skeleton className="h-60 rounded-xl" />
+   444→        </div>
+   445→      </div>
+   446→    );
+   447→  }
+   448→
+   449→  const sentimentPieData = stats
+   450→    ? [
+   451→        { name: "Positive", value: stats.sentimentCounts.positive, fill: COLORS.chart1 },
+   452→        { name: "Negative", value: stats.sentimentCounts.negative, fill: COLORS.chart2 },
+   453→        { name: "Neutral", value: stats.sentimentCounts.neutral, fill: COLORS.chart3 },
+   454→      ]
+   455→    : [];
+   456→
+   457→  const products = stats?.productStats.map((p) => p.name) || [];
+   458→
+   459→  return (
+   460→    <div className="min-h-screen flex flex-col bg-background">
+   461→      {/* ─── Header ─── */}
+   462→      <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
+   463→        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+   464→          <div className="flex items-center gap-3">
+   465→            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
+   466→              <BrainCircuit size={20} className="text-white" />
+   467→            </div>
+   468→            <div>
+   469→              <h1 className="text-lg font-bold tracking-tight leading-none">ReviewLens</h1>
+   470→              <p className="text-[11px] text-muted-foreground leading-none mt-0.5">AI Review Analysis Agent</p>
+   471→            </div>
+   472→          </div>
+   473→
+   474→          <div className="flex items-center gap-2">
+   475→            <Button
+   476→              variant="ghost"
+   477→              size="icon"
+   478→              className="h-9 w-9"
+   479→              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+   480→            >
+   481→              <Sun size={18} className="rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+   482→              <Moon size={18} className="absolute rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+   483→              <span className="sr-only">Toggle theme</span>
+   484→            </Button>
+   485→            <Button variant="outline" size="sm" onClick={handleExport} className="hidden sm:flex gap-1.5">
+   486→              <Download size={14} />
+   487→              Export
+   488→            </Button>
+   489→          </div>
+   490→        </div>
+   491→      </header>
+   492→
+   493→      {/* ─── Main Content ─── */}
+   494→      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 space-y-6">
+   495→        {/* Tab Navigation */}
+   496→        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   497→          <div className="flex items-center justify-between flex-wrap gap-3">
+   498→            <TabsList className="h-10">
+   499→              <TabsTrigger value="dashboard" className="gap-1.5 text-sm px-3">
+   500→                <LayoutDashboard size={16} />
+   501→                <span className="hidden sm:inline">Dashboard</span>
+   502→              </TabsTrigger>
+   503→              <TabsTrigger value="reviews" className="gap-1.5 text-sm px-3">
+   504→                <MessageSquareText size={16} />
+   505→                <span className="hidden sm:inline">Reviews</span>
+   506→              </TabsTrigger>
+   507→              <TabsTrigger value="insights" className="gap-1.5 text-sm px-3">
+   508→                <BarChart2 size={16} />
+   509→                <span className="hidden sm:inline">Insights</span>
+   510→              </TabsTrigger>
+   511→              <TabsTrigger value="add" className="gap-1.5 text-sm px-3">
+   512→                <MessageSquarePlus size={16} />
+   513→                <span className="hidden sm:inline">Add Review</span>
+   514→              </TabsTrigger>
+   515→            </TabsList>
+   516→
+   517→            <div className="flex items-center gap-2">
+   518→              <Button
+   519→                variant="outline"
+   520→                size="sm"
+   521→                onClick={handleReAnalyze}
+   522→                disabled={analyzing}
+   523→                className="gap-1.5"
+   524→              >
+   525→                <RefreshCw size={14} className={analyzing ? "animate-spin" : ""} />
+   526→                Re-Analyze
+   527→              </Button>
+   528→              <Button
+   529→                size="sm"
+   530→                onClick={() => { setActiveTab("add"); setShowAddForm(true); }}
+   531→                className="gap-1.5 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-lg shadow-violet-500/25"
+   532→              >
+   533→                <Sparkles size={14} />
+   534→                New Review
+   535→              </Button>
+   536→            </div>
+   537→          </div>
+   538→
+   539→          {/* ═══════════════════ DASHBOARD TAB ═══════════════════ */}
+   540→          <TabsContent value="dashboard">
+   541→            <motion.div className="space-y-6" variants={staggerContainer} initial="initial" animate="animate">
+   542→              {/* KPI Cards */}
+   543→              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   544→                <MetricCard
+   545→                  title="Total Reviews"
+   546→                  value={stats?.totalReviews || 0}
+   547→                  subtitle="Across all products"
+   548→                  icon={MessageSquareText}
+   549→                  color="default"
+   550→                />
+   551→                <MetricCard
+   552→                  title="Average Rating"
+   553→                  value={stats?.avgRating || "0"}
+   554→                  subtitle="Out of 5.0 stars"
+   555→                  icon={Star}
+   556→                  trend="up"
+   557→                  color="amber"
+   558→                />
+   559→                <MetricCard
+   560→                  title="NPS Score"
+   561→                  value={stats?.nps || 0}
+   562→                  subtitle="Net Promoter Score"
+   563→                  icon={TrendingUp}
+   564→                  trend={stats && stats.nps >= 0 ? "up" : "down"}
+   565→                  color={stats && stats.nps >= 30 ? "emerald" : stats && stats.nps >= 0 ? "amber" : "red"}
+   566→                />
+   567→                <MetricCard
+   568→                  title="AI Confidence"
+   569→                  value={`${stats?.avgConfidence || 0}%`}
+   570→                  subtitle="Avg. analysis accuracy"
+   571→                  icon={BrainCircuit}
+   572→                  color="violet"
+   573→                />
+   574→              </div>
+   575→
+   576→              {/* Sentiment Distribution & Rating Distribution */}
+   577→              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   578→                {/* Sentiment Pie Chart */}
+   579→                <motion.div {...fadeInUp}>
+   580→                  <Card>
+   581→                    <CardHeader className="pb-2">
+   582→                      <CardTitle className="text-base font-semibold flex items-center gap-2">
+   583→                        <PieChartIcon size={18} className="text-primary" />
+   584→                        Sentiment Distribution
+   585→                      </CardTitle>
+   586→                      <CardDescription>Overall customer sentiment breakdown</CardDescription>
+   587→                    </CardHeader>
+   588→                    <CardContent>
+   589→                      <div className="flex items-center gap-4">
+   590→                        <ChartContainer config={CHART_CONFIG} className="h-[200px] flex-1">
+   591→                          <PieChart>
+   592→                            <Pie
+   593→                              data={sentimentPieData}
+   594→                              cx="50%"
+   595→                              cy="50%"
+   596→                              innerRadius={50}
+   597→                              outerRadius={80}
+   598→                              paddingAngle={4}
+   599→                              dataKey="value"
+   600→                              strokeWidth={0}
+   601→                            >
+   602→                              {sentimentPieData.map((entry, index) => (
+   603→                                <Cell key={index} fill={entry.fill} />
+   604→                              ))}
+   605→                            </Pie>
+   606→                            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+   607→                          </PieChart>
+   608→                        </ChartContainer>
+   609→                        <div className="space-y-3 min-w-[100px]">
+   610→                          {sentimentPieData.map((item) => (
+   611→                            <div key={item.name} className="flex items-center gap-2">
+   612→                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.fill }} />
+   613→                              <div>
+   614→                                <p className="text-xs font-medium">{item.name}</p>
+   615→                                <p className="text-lg font-bold">{item.value}</p>
+   616→                              </div>
+   617→                            </div>
+   618→                          ))}
+   619→                        </div>
+   620→                      </div>
+   621→                      {/* Sentiment Progress Bars */}
+   622→                      <div className="mt-4 space-y-2">
+   623→                        {[
+   624→                          { label: "Positive", pct: stats?.sentimentPcts.positive || 0, color: "bg-emerald-500" },
+   625→                          { label: "Neutral", pct: stats?.sentimentPcts.neutral || 0, color: "bg-slate-400" },
+   626→                          { label: "Negative", pct: stats?.sentimentPcts.negative || 0, color: "bg-red-500" },
+   627→                        ].map((s) => (
+   628→                          <div key={s.label} className="flex items-center gap-3">
+   629→                            <span className="text-xs w-16 text-muted-foreground">{s.label}</span>
+   630→                            <Progress value={s.pct} className="h-2 flex-1" />
+   631→                            <span className="text-xs font-bold w-10 text-right">{s.pct}%</span>
+   632→                          </div>
+   633→                        ))}
+   634→                      </div>
+   635→                    </CardContent>
+   636→                  </Card>
+   637→                </motion.div>
+   638→
+   639→                {/* Rating Distribution Bar Chart */}
+   640→                <motion.div {...fadeInUp} transition={{ delay: 0.1 }}>
+   641→                  <Card>
+   642→                    <CardHeader className="pb-2">
+   643→                      <CardTitle className="text-base font-semibold flex items-center gap-2">
+   644→                        <BarChart3 size={18} className="text-primary" />
+   645→                        Rating Distribution
+   646→                      </CardTitle>
+   647→                      <CardDescription>Number of reviews per star rating</CardDescription>
+   648→                    </CardHeader>
+   649→                    <CardContent>
+   650→                      <ChartContainer config={CHART_CONFIG} className="h-[280px]">
+   651→                        <BarChart data={stats?.ratingDist || []} layout="vertical" margin={{ left: 0 }}>
+   652→                          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+   653→                          <XAxis type="number" />
+   654→                          <YAxis dataKey="rating" type="category" width={30} tickFormatter={(v) => `${v}★`} />
+   655→                          <ChartTooltip content={<ChartTooltipContent />} />
+   656→                          <Bar dataKey="count" radius={[0, 6, 6, 0]} fill="var(--color-chart4)">
+   657→                            {stats?.ratingDist.map((entry, index) => (
+   658→                              <Cell
+   659→                                key={index}
+   660→                                fill={entry.rating >= 4 ? COLORS.chart1 : entry.rating === 3 ? COLORS.chart3 : COLORS.chart2}
+   661→                              />
+   662→                            ))}
+   663→                          </Bar>
+   664→                        </BarChart>
+   665→                      </ChartContainer>
+   666→                    </CardContent>
+   667→                  </Card>
+   668→                </motion.div>
+   669→              </div>
+   670→
+   671→              {/* Product Comparison & Trend */}
+   672→              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   673→                {/* Product Comparison */}
+   674→                <motion.div {...fadeInUp} transition={{ delay: 0.2 }}>
+   675→                  <Card>
+   676→                    <CardHeader className="pb-2">
+   677→                      <CardTitle className="text-base font-semibold flex items-center gap-2">
+   678→                        <Globe size={18} className="text-primary" />
+   679→                        Product Comparison
+   680→                      </CardTitle>
+   681→                      <CardDescription>Sentiment analysis by product</CardDescription>
+   682→                    </CardHeader>
+   683→                    <CardContent>
+   684→                      <div className="space-y-3">
+   685→                        {stats?.productStats.map((product) => (
+   686→                          <div key={product.name} className="p-3 rounded-lg border border-border/50 hover:border-border transition-colors">
+   687→                            <div className="flex items-center justify-between mb-2">
+   688→                              <span className="text-sm font-semibold">{product.name}</span>
+   689→                              <div className="flex items-center gap-2">
+   690→                                <StarRating rating={Math.round(product.avgRating)} size={12} />
+   691→                                <span className="text-sm font-bold">{product.avgRating}</span>
+   692→                              </div>
+   693→                            </div>
+   694→                            <div className="flex gap-1 h-2 rounded-full overflow-hidden bg-muted">
+   695→                              <div className="bg-emerald-500 rounded-l-full" style={{ width: `${product.positivePct}%` }} />
+   696→                              <div className="bg-slate-400" style={{ width: `${product.neutralPct}%` }} />
+   697→                              <div className="bg-red-500 rounded-r-full" style={{ width: `${product.negativePct}%` }} />
+   698→                            </div>
+   699→                            <div className="flex justify-between mt-1.5 text-[10px] text-muted-foreground">
+   700→                              <span>{product.count} reviews</span>
+   701→                              <span>{product.positivePct}% positive</span>
+   702→                            </div>
+   703→                          </div>
+   704→                        ))}
+   705→                      </div>
+   706→                    </CardContent>
+   707→                  </Card>
+   708→                </motion.div>
+   709→
+   710→                {/* Sentiment Trend Radar */}
+   711→                <motion.div {...fadeInUp} transition={{ delay: 0.3 }}>
+   712→                  <Card>
+   713→                    <CardHeader className="pb-2">
+   714→                      <CardTitle className="text-base font-semibold flex items-center gap-2">
+   715→                        <Activity size={18} className="text-primary" />
+   716→                        Topic Radar
+   717→                      </CardTitle>
+   718→                      <CardDescription>Top 8 most discussed topics</CardDescription>
+   719→                    </CardHeader>
+   720→                    <CardContent>
+   721→                      <ChartContainer
+   722→                        config={Object.fromEntries(
+   723→                          (stats?.topicStats || []).slice(0, 8).map((t, i) => [t.name, { label: t.name, color: [`hsl(142, 71%, ${45 - i * 4}%)`, `hsl(142, 71%, ${45 - i * 4}%)`] }])
+   724→                        )}
+   725→                        className="h-[280px]"
+   726→                      >
+   727→                        <RadarChart data={stats?.topicStats.slice(0, 8).map(t => ({ topic: t.name, count: t.count })) || []}>
+   728→                          <PolarGrid />
+   729→                          <PolarAngleAxis dataKey="topic" tick={{ fontSize: 10 }} />
+   730→                          <Radar name="Mentions" dataKey="count" stroke="hsl(142, 71%, 45%)" fill="hsl(142, 71%, 45%)" fillOpacity={0.2} />
+   731→                          <ChartTooltip />
+   732→                        </RadarChart>
+   733→                      </ChartContainer>
+   734→                    </CardContent>
+   735→                  </Card>
+   736→                </motion.div>
+   737→              </div>
+   738→            </motion.div>
+   739→          </TabsContent>
+   740→
+   741→          {/* ═══════════════════ REVIEWS TAB ═══════════════════ */}
+   742→          <TabsContent value="reviews">
+   743→            <motion.div {...fadeInUp} className="space-y-4">
+   744→              {/* Filters Bar */}
+   745→              <Card>
+   746→                <CardContent className="p-3 md:p-4">
+   747→                  <div className="flex flex-wrap items-center gap-2 md:gap-3">
+   748→                    <div className="relative flex-1 min-w-[200px]">
+   749→                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+   750→                      <Input
+   751→                        placeholder="Search reviews..."
+   752→                        value={searchQuery}
+   753→                        onChange={(e) => setSearchQuery(e.target.value)}
+   754→                        className="pl-9 h-9 text-sm"
+   755→                      />
+   756→                    </div>
+   757→                    <Select value={filterSentiment} onValueChange={setFilterSentiment}>
+   758→                      <SelectTrigger className="w-[130px] h-9 text-sm">
+   759→                        <Filter size={14} className="mr-1.5" />
+   760→                        <SelectValue />
+   761→                      </SelectTrigger>
+   762→                      <SelectContent>
+   763→                        <SelectItem value="all">All Sentiment</SelectItem>
+   764→                        <SelectItem value="positive">Positive</SelectItem>
+   765→                        <SelectItem value="negative">Negative</SelectItem>
+   766→                        <SelectItem value="neutral">Neutral</SelectItem>
+   767→                      </SelectContent>
+   768→                    </Select>
+   769→                    <Select value={filterProduct} onValueChange={setFilterProduct}>
+   770→                      <SelectTrigger className="w-[160px] h-9 text-sm">
+   771→                        <Globe size={14} className="mr-1.5" />
+   772→                        <SelectValue />
+   773→                      </SelectTrigger>
+   774→                      <SelectContent>
+   775→                        <SelectItem value="all">All Products</SelectItem>
+   776→                        {products.map((p) => (
+   777→                          <SelectItem key={p} value={p}>{p}</SelectItem>
+   778→                        ))}
+   779→                      </SelectContent>
+   780→                    </Select>
+   781→                    <Select value={sortBy} onValueChange={setSortBy}>
+   782→                      <SelectTrigger className="w-[130px] h-9 text-sm">
+   783→                        <SelectValue />
+   784→                      </SelectTrigger>
+   785→                      <SelectContent>
+   786→                        <SelectItem value="newest">Newest First</SelectItem>
+   787→                        <SelectItem value="oldest">Oldest First</SelectItem>
+   788→                        <SelectItem value="rating-high">Rating: High-Low</SelectItem>
+   789→                        <SelectItem value="rating-low">Rating: Low-High</SelectItem>
+   790→                      </SelectContent>
+   791→                    </Select>
+   792→                    {(searchQuery || filterSentiment !== "all" || filterProduct !== "all") && (
+   793→                      <Button
+   794→                        variant="ghost"
+   795→                        size="sm"
+   796→                        onClick={() => { setSearchQuery(""); setFilterSentiment("all"); setFilterProduct("all"); }}
+   797→                        className="h-9 gap-1"
+   798→                      >
+   799→                        <X size={14} />
+   800→                        Clear
+   801→                      </Button>
+   802→                    )}
+   803→                  </div>
+   804→                </CardContent>
+   805→              </Card>
+   806→
+   807→              {/* Reviews Grid */}
+   808→              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   809→                <AnimatePresence mode="popLayout">
+   810→                  {reviews.map((review) => (
+   811→                    <ReviewCard key={review.id} review={review} onDelete={handleDeleteReview} />
+   812→                  ))}
+   813→                </AnimatePresence>
+   814→              </div>
+   815→
+   816→              {reviews.length === 0 && (
+   817→                <div className="text-center py-16">
+   818→                  <Eye size={48} className="mx-auto text-muted-foreground/30 mb-4" />
+   819→                  <p className="text-lg font-medium text-muted-foreground">No reviews found</p>
+   820→                  <p className="text-sm text-muted-foreground/60 mt-1">Try adjusting your filters or add new reviews</p>
+   821→                </div>
+   822→              )}
+   823→            </motion.div>
+   824→          </TabsContent>
+   825→
+   826→          {/* ═══════════════════ INSIGHTS TAB ═══════════════════ */}
+   827→          <TabsContent value="insights">
+   828→            <motion.div className="space-y-6" variants={staggerContainer} initial="initial" animate="animate">
+   829→              {/* Word Cloud */}
+   830→              <motion.div {...fadeInUp}>
+   831→                <Card>
+   832→                  <CardHeader className="pb-2">
+   833→                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+   834→                      <Sparkles size={18} className="text-primary" />
+   835→                      Keyword Cloud
+   836→                    </CardTitle>
+   837→                    <CardDescription>Most frequently mentioned keywords across all reviews</CardDescription>
+   838→                  </CardHeader>
+   839→                  <CardContent>
+   840→                    <WordCloud words={stats?.keywordStats || []} />
+   841→                  </CardContent>
+   842→                </Card>
+   843→              </motion.div>
+   844→
+   845→              {/* Topic Breakdown */}
+   846→              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   847→                <motion.div {...fadeInUp} transition={{ delay: 0.1 }}>
+   848→                  <Card>
+   849→                    <CardHeader className="pb-2">
+   850→                      <CardTitle className="text-base font-semibold flex items-center gap-2">
+   851→                        <Tag size={18} className="text-primary" />
+   852→                        Topic Frequency
+   853→                      </CardTitle>
+   854→                      <CardDescription>How often each topic appears in reviews</CardDescription>
+   855→                    </CardHeader>
+   856→                    <CardContent>
+   857→                      <ChartContainer config={CHART_CONFIG} className="h-[300px]">
+   858→                        <BarChart data={stats?.topicStats || []} margin={{ left: 0 }}>
+   859→                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+   860→                          <XAxis dataKey="name" tick={{ fontSize: 10, angle: -45, textAnchor: "end" }} height={80} />
+   861→                          <YAxis />
+   862→                          <ChartTooltip content={<ChartTooltipContent />} />
+   863→                          <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+   864→                            {stats?.topicStats.map((_, index) => (
+   865→                              <Cell
+   866→                                key={index}
+   867→                                fill={`hsl(${(index * 45) % 360}, 65%, 55%)`}
+   868→                              />
+   869→                            ))}
+   870→                          </Bar>
+   871→                        </BarChart>
+   872→                      </ChartContainer>
+   873→                    </CardContent>
+   874→                  </Card>
+   875→                </motion.div>
+   876→
+   877→                {/* Sentiment Trend */}
+   878→                <motion.div {...fadeInUp} transition={{ delay: 0.2 }}>
+   879→                  <Card>
+   880→                    <CardHeader className="pb-2">
+   881→                      <CardTitle className="text-base font-semibold flex items-center gap-2">
+   882→                        <TrendingUp size={18} className="text-primary" />
+   883→                        Recent Sentiment Flow
+   884→                      </CardTitle>
+   885→                      <CardDescription>Rating trend of latest 10 reviews</CardDescription>
+   886→                    </CardHeader>
+   887→                    <CardContent>
+   888→                      <ChartContainer config={CHART_CONFIG} className="h-[300px]">
+   889→                        <AreaChart data={stats?.trendData || []} margin={{ left: 0, right: 0 }}>
+   890→                          <defs>
+   891→                            <linearGradient id="ratingGrad" x1="0" y1="0" x2="0" y2="1">
+   892→                              <stop offset="5%" stopColor={COLORS.accent} stopOpacity={0.3} />
+   893→                              <stop offset="95%" stopColor={COLORS.accent} stopOpacity={0} />
+   894→                            </linearGradient>
+   895→                          </defs>
+   896→                          <CartesianGrid strokeDasharray="3 3" />
+   897→                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+   898→                          <YAxis domain={[0, 5]} />
+   899→                          <ChartTooltip content={<ChartTooltipContent />} />
+   900→                          <Area type="monotone" dataKey="rating" stroke={COLORS.accent} fill="url(#ratingGrad)" strokeWidth={2} />
+   901→                        </AreaChart>
+   902→                      </ChartContainer>
+   903→                    </CardContent>
+   904→                  </Card>
+   905→                </motion.div>
+   906→              </div>
+   907→
+   908→              {/* Product Sentiment Matrix */}
+   909→              <motion.div {...fadeInUp} transition={{ delay: 0.3 }}>
+   910→                <Card>
+   911→                  <CardHeader className="pb-2">
+   912→                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+   913→                      <BrainCircuit size={18} className="text-primary" />
+   914→                      Product Sentiment Matrix
+   915→                    </CardTitle>
+   916→                    <CardDescription>Detailed sentiment breakdown per product</CardDescription>
+   917→                  </CardHeader>
+   918→                  <CardContent>
+   919→                    <div className="overflow-x-auto">
+   920→                      <table className="w-full text-sm">
+   921→                        <thead>
+   922→                          <tr className="border-b border-border">
+   923→                            <th className="text-left py-3 px-4 font-semibold">Product</th>
+   924→                            <th className="text-center py-3 px-4 font-semibold">Reviews</th>
+   925→                            <th className="text-center py-3 px-4 font-semibold">Avg Rating</th>
+   926→                            <th className="text-center py-3 px-4 font-semibold">Positive</th>
+   927→                            <th className="text-center py-3 px-4 font-semibold">Neutral</th>
+   928→                            <th className="text-center py-3 px-4 font-semibold">Negative</th>
+   929→                            <th className="text-center py-3 px-4 font-semibold">Sentiment</th>
+   930→                          </tr>
+   931→                        </thead>
+   932→                        <tbody>
+   933→                          {stats?.productStats.map((product, i) => (
+   934→                            <tr key={product.name} className={i % 2 === 0 ? "bg-muted/20" : ""}>
+   935→                              <td className="py-3 px-4 font-medium">{product.name}</td>
+   936→                              <td className="py-3 px-4 text-center">{product.count}</td>
+   937→                              <td className="py-3 px-4 text-center">
+   938→                                <div className="flex items-center justify-center gap-1">
+   939→                                  <StarRating rating={Math.round(product.avgRating)} size={12} />
+   940→                                  <span className="font-bold ml-1">{product.avgRating}</span>
+   941→                                </div>
+   942→                              </td>
+   943→                              <td className="py-3 px-4 text-center">
+   944→                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{product.positivePct}%</span>
+   945→                              </td>
+   946→                              <td className="py-3 px-4 text-center">
+   947→                                <span className="text-slate-500 font-semibold">{product.neutralPct}%</span>
+   948→                              </td>
+   949→                              <td className="py-3 px-4 text-center">
+   950→                                <span className="text-red-600 dark:text-red-400 font-semibold">{product.negativePct}%</span>
+   951→                              </td>
+   952→                              <td className="py-3 px-4 text-center">
+   953→                                <div className="flex gap-0.5 h-4 justify-center">
+   954→                                  <div className="bg-emerald-500 rounded-l-full" style={{ width: `${product.positivePct * 0.6}px` }} />
+   955→                                  <div className="bg-slate-400" style={{ width: `${product.neutralPct * 0.6}px` }} />
+   956→                                  <div className="bg-red-500 rounded-r-full" style={{ width: `${product.negativePct * 0.6}px` }} />
+   957→                                </div>
+   958→                              </td>
+   959→                            </tr>
+   960→                          ))}
+   961→                        </tbody>
+   962→                      </table>
+   963→                    </div>
+   964→                  </CardContent>
+   965→                </Card>
+   966→              </motion.div>
+   967→            </motion.div>
+   968→          </TabsContent>
+   969→
+   970→          {/* ═══════════════════ ADD REVIEW TAB ═══════════════════ */}
+   971→          <TabsContent value="add">
+   972→            <motion.div {...fadeInUp} className="max-w-2xl mx-auto space-y-6">
+   973→              <Card>
+   974→                <CardHeader>
+   975→                  <CardTitle className="text-lg flex items-center gap-2">
+   976→                    <Sparkles size={20} className="text-violet-500" />
+   977→                    Add New Review
+   978→                  </CardTitle>
+   979→                  <CardDescription>Submit a customer review and our AI agent will analyze sentiment, extract topics, and identify keywords automatically.</CardDescription>
+   980→                </CardHeader>
+   981→                <CardContent className="space-y-4">
+   982→                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   983→                    <div className="space-y-2">
+   984→                      <label className="text-sm font-medium">Author Name</label>
+   985→                      <Input
+   986→                        placeholder="e.g. John D."
+   987→                        value={newAuthor}
+   988→                        onChange={(e) => setNewAuthor(e.target.value)}
+   989→                      />
+   990→                    </div>
+   991→                    <div className="space-y-2">
+   992→                      <label className="text-sm font-medium">Product Name</label>
+   993→                      <Input
+   994→                        placeholder="e.g. WirelessPro Headphones"
+   995→                        value={newProduct}
+   996→                        onChange={(e) => setNewProduct(e.target.value)}
+   997→                      />
+   998→                    </div>
+   999→                  </div>
+  1000→
+  1001→                  <div className="space-y-2">
+  1002→                    <label className="text-sm font-medium">Rating</label>
+  1003→                    <div className="flex items-center gap-2">
+  1004→                      {[1, 2, 3, 4, 5].map((star) => (
+  1005→                        <button
+  1006→                          key={star}
+  1007→                          onClick={() => setNewRating(star)}
+  1008→                          className="p-1 hover:scale-110 transition-transform"
+  1009→                        >
+  1010→                          <Star
+  1011→                            size={28}
+  1012→                            className={
+  1013→                              star <= newRating
+  1014→                                ? "fill-amber-400 text-amber-400 drop-shadow-sm"
+  1015→                                : "fill-muted text-muted-foreground/30"
+  1016→                            }
+  1017→                          />
+  1018→                        </button>
+  1019→                      ))}
+  1020→                      <span className="text-sm text-muted-foreground ml-2">{newRating} / 5</span>
+  1021→                    </div>
+  1022→                  </div>
+  1023→
+  1024→                  <div className="space-y-2">
+  1025→                    <label className="text-sm font-medium">Review Content</label>
+  1026→                    <Textarea
+  1027→                      placeholder="Write the customer review here... The AI agent will analyze sentiment, extract topics, and identify key phrases automatically."
+  1028→                      value={newContent}
+  1029→                      onChange={(e) => setNewContent(e.target.value)}
+  1030→                      rows={5}
+  1031→                      className="resize-none"
+  1032→                    />
+  1033→                  </div>
+  1034→
+  1035→                  <div className="flex items-center gap-3 pt-2">
+  1036→                    <Button
+  1037→                      onClick={handleAddReview}
+  1038→                      disabled={submitting || !newContent.trim() || !newAuthor.trim()}
+  1039→                      className="flex-1 sm:flex-none bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white shadow-lg shadow-violet-500/25"
+  1040→                    >
+  1041→                      {submitting ? (
+  1042→                        <>
+  1043→                          <RefreshCw size={16} className="mr-2 animate-spin" />
+  1044→                          Analyzing...
+  1045→                        </>
+  1046→                      ) : (
+  1047→                        <>
+  1048→                          <BrainCircuit size={16} className="mr-2" />
+  1049→                          Analyze & Add Review
+  1050→                        </>
+  1051→                      )}
+  1052→                    </Button>
+  1053→                  </div>
+  1054→                </CardContent>
+  1055→              </Card>
+  1056→
+  1057→              {/* CSV Upload */}
+  1058→              <Card>
+  1059→                <CardHeader>
+  1060→                  <CardTitle className="text-base flex items-center gap-2">
+  1061→                    <Upload size={18} className="text-primary" />
+  1062→                    Bulk Import (CSV)
+  1063→                  </CardTitle>
+  1064→                  <CardDescription>
+  1065→                    Upload a CSV file with columns: author, rating, content, product. Each row will be automatically analyzed.
+  1066→                  </CardDescription>
+  1067→                </CardHeader>
+  1068→                <CardContent>
+  1069→                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
+  1070→                    <Upload size={24} className="text-muted-foreground mb-2" />
+  1071→                    <p className="text-sm text-muted-foreground">
+  1072→                      {submitting ? "Importing..." : "Click to upload CSV or drag and drop"}
+  1073→                    </p>
+  1074→                    <input
+  1075→                      type="file"
+  1076→                      accept=".csv"
+  1077→                      onChange={handleCSVUpload}
+  1078→                      className="hidden"
+  1079→                      disabled={submitting}
+  1080→                    />
+  1081→                  </label>
+  1082→                </CardContent>
+  1083→              </Card>
+  1084→            </motion.div>
+  1085→          </TabsContent>
+  1086→        </Tabs>
+  1087→      </main>
+  1088→
+  1089→      {/* ─── Footer ─── */}
+  1090→      <footer className="border-t border-border/40 mt-auto">
+  1091→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between text-xs text-muted-foreground">
+  1092→          <p>ReviewLens — AI-Powered Customer Review Analysis</p>
+  1093→          <div className="flex items-center gap-1">
+  1094→            <BrainCircuit size={12} />
+  1095→            <span>Built with Next.js, Recharts & AI</span>
+  1096→          </div>
+  1097→        </div>
+  1098→      </footer>
+  1099→    </div>
+  1100→  );
+  1101→}
+  1102→
+  1103→// ─── CSV Parser Helper ───
+  1104→function parseCSVLine(line: string): string[] {
+  1105→  const result: string[] = [];
+  1106→  let current = "";
+  1107→  let inQuotes = false;
+  1108→
+  1109→  for (let i = 0; i < line.length; i++) {
+  1110→    const char = line[i];
+  1111→    if (inQuotes) {
+  1112→      if (char === '"' && line[i + 1] === '"') {
+  1113→        current += '"';
+  1114→        i++;
+  1115→      } else if (char === '"') {
+  1116→        inQuotes = false;
+  1117→      } else {
+  1118→        current += char;
+  1119→      }
+  1120→    } else {
+  1121→      if (char === '"') {
+  1122→        inQuotes = true;
+  1123→      } else if (char === ",") {
+  1124→        result.push(current.trim());
+  1125→        current = "";
+  1126→      } else {
+  1127→        current += char;
+  1128→      }
+  1129→    }
+  1130→  }
+  1131→  result.push(current.trim());
+  1132→  return result;
+  1133→}

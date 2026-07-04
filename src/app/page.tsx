@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "next-themes";
 import {
   BarChart3, MessageSquarePlus, TrendingUp, Search, Star, ThumbsUp, ThumbsDown,
   Minus, Download, Upload, Trash2, RefreshCw, Filter, Sparkles, Globe,
   PieChart as PieChartIcon, Activity, Eye, BrainCircuit, ChevronDown,
-  Sun, Moon, LayoutDashboard, MessageSquareText, BarChart2, Tag, X, ArrowUpRight, ArrowDownRight
+  Sun, Moon, LayoutDashboard, MessageSquareText, BarChart2, Tag, X, ArrowUpRight, ArrowDownRight,
+  MessageCircle, Send, Bot, UserCircle, Minimize2, Maximize2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -1096,7 +1097,260 @@ export default function ReviewAnalysisAgent() {
           </div>
         </div>
       </footer>
+
+      {/* ═══════════ FLOATING AI CHAT WIDGET ═══════════ */}
+      <AIChatWidget />
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FLOATING AI CHAT WIDGET
+// ═══════════════════════════════════════════════════════════════
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+function AIChatWidget() {
+  const [open, setOpen] = useState(false);
+  const [minimized, setMinimized] = useState(false);
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      role: "assistant",
+      content: "Hi! I'm your ReviewLens AI assistant. Ask me anything about your customer reviews — sentiment trends, product comparisons, common complaints, or action items. Try: \"What are the top complaints?\" or \"Compare products by rating.\"",
+    },
+  ]);
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, loading]);
+
+  useEffect(() => {
+    if (open && !minimized && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [open, minimized]);
+
+  const handleSend = async () => {
+    if (!input.trim() || loading) return;
+    const userMsg = input.trim();
+    setInput("");
+
+    const newMessages: ChatMessage[] = [...messages, { role: "user", content: userMsg }];
+    setMessages(newMessages);
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMsg,
+          history: newMessages.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setMessages([...newMessages, { role: "assistant", content: `Error: ${data.error}` }]);
+      } else {
+        setMessages([...newMessages, { role: "assistant", content: data.reply }]);
+      }
+    } catch {
+      setMessages([...newMessages, { role: "assistant", content: "Sorry, something went wrong. Please try again." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const quickQuestions = [
+    "What are the top complaints?",
+    "Which product has the best reviews?",
+    "Summarize negative feedback",
+    "What topics are trending?",
+  ];
+
+  return (
+    <>
+      {/* FAB Button */}
+      <motion.div
+        className="fixed bottom-6 right-6 z-[100]"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: open ? 0 : 1, opacity: open ? 0 : 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+      >
+        <button
+          onClick={() => setOpen(true)}
+          className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 hover:scale-105 active:scale-95 transition-all flex items-center justify-center"
+        >
+          <MessageCircle size={24} />
+          <span className="absolute -top-1 -right-1 h-4 w-4 bg-emerald-500 rounded-full border-2 border-background animate-pulse" />
+        </button>
+      </motion.div>
+
+      {/* Chat Panel */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="fixed z-[100] flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card shadow-2xl shadow-black/20"
+            initial={minimized ? { opacity: 0, y: 0, scale: 0.95 } : { opacity: 0, y: 20, scale: 0.95 }}
+            animate={minimized
+              ? { opacity: 1, y: 0, scale: 1, bottom: 24, right: 24, width: 300, height: 56 }
+              : { opacity: 1, y: 0, scale: 1, bottom: 24, right: 24, width: 400, height: 560 }
+            }
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            style={{ position: "fixed" }}
+          >
+            {/* Chat Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-gradient-to-r from-violet-500/10 to-purple-500/10">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-md shadow-violet-500/20">
+                  <Bot size={16} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold leading-none">ReviewLens AI</p>
+                  <p className="text-[11px] text-emerald-500 flex items-center gap-1 mt-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block" />
+                    Online — Analyzing your reviews
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setMinimized(!minimized)}
+                  className="h-7 w-7 rounded-lg hover:bg-muted flex items-center justify-center transition-colors"
+                >
+                  {minimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+                </button>
+                <button
+                  onClick={() => setOpen(false)}
+                  className="h-7 w-7 rounded-lg hover:bg-muted flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Chat Body */}
+            {!minimized && (
+              <>
+                <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4" style={{ maxHeight: "calc(100% - 130px)" }}>
+                  {messages.map((msg, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
+                    >
+                      {/* Avatar */}
+                      <div className={`shrink-0 h-7 w-7 rounded-lg flex items-center justify-center ${
+                        msg.role === "assistant"
+                          ? "bg-gradient-to-br from-violet-500/20 to-purple-500/20 text-violet-600 dark:text-violet-400"
+                          : "bg-primary/10 text-primary"
+                      }`}>
+                        {msg.role === "assistant" ? <Bot size={14} /> : <UserCircle size={14} />}
+                      </div>
+
+                      {/* Bubble */}
+                      <div
+                        className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                          msg.role === "assistant"
+                            ? "bg-muted text-foreground rounded-tl-md"
+                            : "bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-tr-md"
+                        }`}
+                      >
+                        {msg.content.split("\n").map((line, j) => (
+                          <React.Fragment key={j}>
+                            {line.startsWith("- ") || line.startsWith("* ") || /^\d+\./.test(line) ? (
+                              <span className="flex items-start gap-1.5">
+                                <span className="shrink-0 mt-0.5">{line.startsWith("- ") || line.startsWith("* ") ? "•" : ""}</span>
+                                <span>{line.replace(/^[-*]\s+|^\d+\.\s+/, "")}</span>
+                              </span>
+                            ) : (
+                              <span>{line}</span>
+                            )}
+                            {j < msg.content.split("\n").length - 1 && <br />}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ))}
+
+                  {/* Typing Indicator */}
+                  {loading && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex gap-2.5"
+                    >
+                      <div className="shrink-0 h-7 w-7 rounded-lg bg-gradient-to-br from-violet-500/20 to-purple-500/20 text-violet-600 dark:text-violet-400 flex items-center justify-center">
+                        <Bot size={14} />
+                      </div>
+                      <div className="bg-muted rounded-2xl rounded-tl-md px-4 py-3 flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <span className="h-2 w-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <span className="h-2 w-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* Quick Questions */}
+                {messages.length <= 1 && !loading && (
+                  <div className="px-4 pb-2 flex flex-wrap gap-1.5">
+                    {quickQuestions.map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => { setInput(q); inputRef.current?.focus(); }}
+                        className="text-[11px] px-2.5 py-1 rounded-full border border-border/60 bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input Area */}
+                <div className="p-3 border-t border-border/50 bg-background">
+                  <form
+                    onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+                    className="flex items-center gap-2"
+                  >
+                    <input
+                      ref={inputRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder="Ask about your reviews..."
+                      disabled={loading}
+                      className="flex-1 h-9 px-3 text-sm bg-muted/50 border border-border/50 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500/50 disabled:opacity-50 transition-all placeholder:text-muted-foreground/60"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!input.trim() || loading}
+                      className="h-9 w-9 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white flex items-center justify-center shadow-md shadow-violet-500/20 hover:shadow-violet-500/40 disabled:opacity-40 disabled:shadow-none hover:scale-105 active:scale-95 transition-all"
+                    >
+                      <Send size={16} />
+                    </button>
+                  </form>
+                  <p className="text-[10px] text-muted-foreground/50 text-center mt-1.5">
+                    AI-powered analysis of your review data
+                  </p>
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

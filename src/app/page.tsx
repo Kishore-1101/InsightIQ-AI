@@ -8,6 +8,8 @@ import UploadView from "@/components/views/UploadView";
 import InsightsView from "@/components/views/InsightsView";
 import ChatView from "@/components/views/ChatView";
 import SettingsView from "@/components/views/SettingsView";
+import LoginView from "@/components/views/LoginView";
+import ProfileView from "@/components/views/ProfileView";
 import { Toaster } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -38,17 +40,41 @@ interface Stats {
   trendData: { date: string; sentiment: number; rating: number }[];
 }
 
+interface UserProfile {
+  name: string;
+  email: string;
+  role: string;
+  company: string;
+  bio?: string;
+  avatarUrl?: string;
+}
+
 export default function ReviewAnalysisAgent() {
   const [activeView, setActiveView] = useState("dashboard");
   const [reviews, setReviews] = useState<Review[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Auth Session States
+  const [user, setUser] = useState<UserProfile | null>(null);
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSentiment, setFilterSentiment] = useState("all");
   const [filterProduct, setFilterProduct] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+
+  // Load session from local storage on mount
+  useEffect(() => {
+    const savedUser = localStorage.getItem("reviewlens_user");
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (err) {
+        console.error("Failed to restore session:", err);
+      }
+    }
+  }, []);
 
   const fetchReviews = useCallback(async () => {
     try {
@@ -58,7 +84,7 @@ export default function ReviewAnalysisAgent() {
       if (filterProduct !== "all") params.set("product", filterProduct);
       params.set("sort", sortBy);
       params.set("page", "1");
-      params.set("limit", "100"); // Fetch a broad list for client-side pagination / TanStack table support
+      params.set("limit", "100");
 
       const res = await fetch(`/api/reviews?${params}`);
       const data = await res.json();
@@ -114,6 +140,26 @@ export default function ReviewAnalysisAgent() {
     }
   };
 
+  const handleLoginSuccess = (userData: UserProfile) => {
+    setUser(userData);
+    localStorage.setItem("reviewlens_user", JSON.stringify(userData));
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem("reviewlens_user");
+    setActiveView("dashboard");
+  };
+
+  if (!user) {
+    return (
+      <>
+        <Toaster position="top-right" richColors />
+        <LoginView onLoginSuccess={handleLoginSuccess} />
+      </>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex bg-background">
@@ -121,7 +167,7 @@ export default function ReviewAnalysisAgent() {
         <div className="w-64 border-r border-border/40 p-4 space-y-6 hidden md:block">
           <Skeleton className="h-9 w-32 rounded-xl" />
           <div className="space-y-3 pt-6">
-            {[...Array(6)].map((_, i) => (
+            {[...Array(7)].map((_, i) => (
               <Skeleton key={i} className="h-10 w-full rounded-xl" />
             ))}
           </div>
@@ -156,6 +202,7 @@ export default function ReviewAnalysisAgent() {
       activeView={activeView}
       setActiveView={setActiveView}
       reviewCount={stats?.totalReviews || 0}
+      user={user}
     >
       <Toaster position="top-right" richColors />
       {activeView === "dashboard" && (
@@ -181,6 +228,17 @@ export default function ReviewAnalysisAgent() {
       )}
       {activeView === "insights" && <InsightsView />}
       {activeView === "chat" && <ChatView />}
+      {activeView === "profile" && (
+        <ProfileView
+          user={user}
+          onUpdateUser={(updated) => {
+            setUser(updated);
+            localStorage.setItem("reviewlens_user", JSON.stringify(updated));
+          }}
+          onLogout={handleLogout}
+          reviewCount={stats?.totalReviews || 0}
+        />
+      )}
       {activeView === "settings" && <SettingsView />}
     </AppShell>
   );

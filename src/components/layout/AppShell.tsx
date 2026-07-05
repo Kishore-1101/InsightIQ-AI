@@ -4,19 +4,28 @@ import { useTheme } from "next-themes";
 import {
   LayoutDashboard, MessageSquareText, Upload, BrainCircuit,
   MessageCircle, Settings, Menu, ChevronLeft, ChevronRight,
-  Sun, Moon, Bell, LogOut, Sparkles, Database, Search
+  Sun, Moon, Bell, LogOut, Sparkles, Database, Search, User
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+
+interface UserProfile {
+  name: string;
+  email: string;
+  role: string;
+  company: string;
+  avatarUrl?: string;
+}
 
 interface AppShellProps {
   children: React.ReactNode;
   activeView: string;
   setActiveView: (view: string) => void;
   reviewCount: number;
+  user?: UserProfile;
 }
 
-export default function AppShell({ children, activeView, setActiveView, reviewCount }: AppShellProps) {
+export default function AppShell({ children, activeView, setActiveView, reviewCount, user }: AppShellProps) {
   const { theme, setTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -27,6 +36,7 @@ export default function AppShell({ children, activeView, setActiveView, reviewCo
     { id: "upload", label: "Import Center", icon: Upload },
     { id: "insights", label: "AI Insights", icon: BrainCircuit, badge: "AI" },
     { id: "chat", label: "AI Chat Assistant", icon: MessageCircle },
+    { id: "profile", label: "My Profile", icon: User },
     { id: "settings", label: "Settings", icon: Settings },
   ];
 
@@ -36,7 +46,12 @@ export default function AppShell({ children, activeView, setActiveView, reviewCo
     upload: "Data Import Center",
     insights: "AI Strategic Insights",
     chat: "ReviewLens AI Chat",
+    profile: "My Profile Account",
     settings: "System Settings",
+  };
+
+  const getInitials = (fullName: string) => {
+    return fullName.split(" ").map(w => w.charAt(0)).join("").slice(0, 2);
   };
 
   return (
@@ -247,8 +262,17 @@ export default function AppShell({ children, activeView, setActiveView, reviewCo
             </Button>
 
             {/* User Profile */}
-            <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-600 flex items-center justify-center font-bold text-white text-xs shadow-md shadow-purple-500/10 cursor-pointer hover:opacity-90 transition-opacity">
-              CX
+            <div
+              onClick={() => setActiveView("profile")}
+              className="h-8 w-8 rounded-full overflow-hidden border border-border/30 shadow-md cursor-pointer hover:opacity-90 transition-opacity"
+            >
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-tr from-purple-500 to-indigo-600 flex items-center justify-center font-bold text-white text-[10px]">
+                  {user ? getInitials(user.name) : "CX"}
+                </div>
+              )}
             </div>
           </div>
         </header>

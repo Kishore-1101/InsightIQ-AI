@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 
 // Shared sentiment analysis logic
-function analyzeSentiment(text: string, rating: number): { sentiment: string; confidence: number } {
+export function analyzeSentiment(text: string, rating: number): { sentiment: string; confidence: number } {
   const positiveWords = ['love', 'excellent', 'outstanding', 'great', 'perfect', 'best', 'amazing', 'incredible', 'fantastic', 'wonderful', 'impressive', 'beautiful', 'phenomenal', 'blazing', 'solid', 'highly recommend', 'satisfied', 'champion', 'flawless', 'lightning', 'game changer', 'rivals', 'pleased', 'enjoy', 'smooth', 'good', 'nice', 'helpful', 'reliable'];
   const negativeWords = ['terrible', 'worst', 'disappointed', 'poor', 'defective', 'buggy', 'stopped', 'failed', 'frustrating', 'unresponsive', 'noisy', 'overpriced', 'waste', 'broken', 'struggles', 'lacking', 'unreliable', 'chaotic', 'stuck', 'leaked', 'cracked', 'dead', 'laggy', 'rude', 'condescending', 'nightmare', 'awful', 'useless', 'bad', 'horrible', 'hate', 'annoying', 'cheap'];
   
@@ -32,7 +32,7 @@ function analyzeSentiment(text: string, rating: number): { sentiment: string; co
   return { sentiment: 'neutral', confidence: 0.5 };
 }
 
-function extractTopics(text: string): string[] {
+export function extractTopics(text: string): string[] {
   const topicKeywords: Record<string, string[]> = {
     'Build Quality': ['build quality', 'sturdy', 'durable', 'construction', 'materials'],
     'Battery Life': ['battery', 'charge', 'charging', 'battery life', 'power'],
@@ -63,7 +63,7 @@ function extractTopics(text: string): string[] {
   return topics.length > 0 ? topics : ['General'];
 }
 
-function extractKeywords(text: string): string[] {
+export function extractKeywords(text: string): string[] {
   const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'and', 'but', 'or', 'nor', 'not', 'so', 'yet', 'both', 'either', 'neither', 'each', 'every', 'all', 'any', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'too', 'very', 'just', 'because', 'when', 'where', 'how', 'what', 'which', 'who', 'this', 'that', 'these', 'those', 'also', 'about', 'even', 'well', 'still', 'much', 'from', 'like', 'work', 'works', 'working', 'doesnt', 'dont', 'didnt', 'wont', 'cant', 'isnt', 'arent', 'wasnt', 'werent']);
   
   const words = text.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
@@ -185,5 +185,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to delete review' }, { status: 500 });
   }
 }
-
-export { analyzeSentiment, extractTopics, extractKeywords };

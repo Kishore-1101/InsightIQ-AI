@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { analyzeSentiment, extractTopics, extractKeywords } from '../reviews/route';
+import { analyzeSentiment, extractTopics, extractKeywords } from '../route';
 
 // POST /api/reviews/analyze - Re-analyze all reviews with AI
 export async function POST(request: NextRequest) {
@@ -47,7 +47,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid reviews data' }, { status: 400 });
     }
 
-    const created = [];
+    const created: any[] = [];
     for (const item of reviewsData) {
       const { author, rating, content, productName } = item;
       if (!content || !rating) continue;

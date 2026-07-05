@@ -4,7 +4,7 @@ import { useTheme } from "next-themes";
 import {
   LayoutDashboard, MessageSquareText, Upload, BrainCircuit,
   MessageCircle, Settings, Menu, ChevronLeft, ChevronRight,
-  Sun, Moon, Bell, LogOut, Sparkles, Database, Search, User
+  Sun, Moon, Bell, LogOut, Sparkles, Database, Search, User, Grid, Presentation
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,8 @@ export default function AppShell({ children, activeView, setActiveView, reviewCo
     { id: "reviews", label: "Reviews Data", icon: MessageSquareText },
     { id: "upload", label: "Import Center", icon: Upload },
     { id: "insights", label: "AI Insights", icon: BrainCircuit, badge: "AI" },
+    { id: "heatmap", label: "Review Heatmap", icon: Grid },
+    { id: "presentation", label: "Executive Slides", icon: Presentation },
     { id: "chat", label: "AI Chat Assistant", icon: MessageCircle },
     { id: "profile", label: "My Profile", icon: User },
     { id: "settings", label: "Settings", icon: Settings },
@@ -45,6 +47,8 @@ export default function AppShell({ children, activeView, setActiveView, reviewCo
     reviews: "Customer Reviews Explorer",
     upload: "Data Import Center",
     insights: "AI Strategic Insights",
+    heatmap: "Review Concentrated Heatmap",
+    presentation: "Executive Presentation Slides",
     chat: "ReviewLens AI Chat",
     profile: "My Profile Account",
     settings: "System Settings",

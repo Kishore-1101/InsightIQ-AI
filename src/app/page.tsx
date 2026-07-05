@@ -10,6 +10,8 @@ import ChatView from "@/components/views/ChatView";
 import SettingsView from "@/components/views/SettingsView";
 import LoginView from "@/components/views/LoginView";
 import ProfileView from "@/components/views/ProfileView";
+import HeatmapView from "@/components/views/HeatmapView";
+import PresentationView from "@/components/views/PresentationView";
 import { Toaster } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -227,6 +229,8 @@ export default function ReviewAnalysisAgent() {
         <UploadView onManualSubmit={handleManualSubmit} onCSVSubmit={handleCSVSubmit} />
       )}
       {activeView === "insights" && <InsightsView />}
+      {activeView === "heatmap" && <HeatmapView reviews={reviews} />}
+      {activeView === "presentation" && <PresentationView stats={stats} />}
       {activeView === "chat" && <ChatView />}
       {activeView === "profile" && (
         <ProfileView

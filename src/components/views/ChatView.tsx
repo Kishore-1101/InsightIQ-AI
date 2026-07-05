@@ -2,10 +2,12 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send, Bot, UserCircle, RefreshCw, MessageSquare, BrainCircuit,
-  ArrowRight, Sparkles, Database, HelpCircle, XCircle
+  ArrowRight, Sparkles, Database, HelpCircle, XCircle,
+  Mic, MicOff, Volume2, VolumeX
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -16,7 +18,7 @@ export default function ChatView() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      content: "Hello! I am your ReviewLens AI Agent. I have full semantic access to all custom reviews stored in the database. Ask me specific analytical questions — for instance, you could try: \"Summarize negative feedback for headphones\" or \"Which product has the highest overall sentiment index and why?\"",
+      content: "Hello! I am your ReviewLens AI Agent. I have full voice capabilities. Ask me specific analytical questions — for instance, click the microphone button below to ask: \"What are the top customer complaints?\" or \"What action items do you recommend?\"",
     },
   ]);
   const [input, setInput] = useState("");
@@ -24,16 +26,71 @@ export default function ChatView() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // ─── Voice States ───
+  const [isListening, setIsListening] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, loading]);
 
+  // Initialize Speech Recognition
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      
+      if (SpeechRecognition) {
+        setSpeechSupported(true);
+        const rec = new SpeechRecognition();
+        rec.continuous = false; // Stop after user stops speaking
+        rec.interimResults = true;
+        rec.lang = "en-US";
+
+        rec.onstart = () => {
+          setIsListening(true);
+        };
+
+        rec.onresult = (event: any) => {
+          const currentTranscript = Array.from(event.results)
+            .map((result: any) => result[0])
+            .map((result: any) => result.transcript)
+            .join("");
+          setInput(currentTranscript);
+        };
+
+        rec.onerror = (event: any) => {
+          console.error("Speech recognition error:", event.error);
+          setIsListening(false);
+          if (event.error === "not-allowed") {
+            toast.error("Microphone access denied. Please enable mic permissions.");
+          } else {
+            toast.error(`Voice error: ${event.error}`);
+          }
+        };
+
+        rec.onend = () => {
+          setIsListening(false);
+        };
+
+        recognitionRef.current = rec;
+      }
+    }
+  }, []);
+
   const handleSend = async (textToSend?: string) => {
     const query = (textToSend || input).trim();
     if (!query || loading) return;
     
+    // Stop voice listening if active
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+
     setInput("");
     const newMessages: ChatMessage[] = [...messages, { role: "user", content: query }];
     setMessages(newMessages);
@@ -51,18 +108,70 @@ export default function ChatView() {
       const data = await res.json();
       
       if (data.error) {
-        setMessages([...newMessages, { role: "assistant", content: `Failed to query: ${data.error}` }]);
+        const reply = `Failed to query: ${data.error}`;
+        setMessages([...newMessages, { role: "assistant", content: reply }]);
+        triggerTTS(reply);
       } else {
         setMessages([...newMessages, { role: "assistant", content: data.reply }]);
+        triggerTTS(data.reply);
       }
     } catch {
-      setMessages([...newMessages, { role: "assistant", content: "Apologies, the server encountered an error parsing database reviews. Please try again." }]);
+      const reply = "Apologies, the server encountered an error parsing database reviews. Please try again.";
+      setMessages([...newMessages, { role: "assistant", content: reply }]);
+      triggerTTS(reply);
     } finally {
       setLoading(false);
     }
   };
 
+  const triggerTTS = (text: string) => {
+    if (ttsEnabled && typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel(); // Stop current speech
+      const utterance = new SpeechSynthesisUtterance(text);
+      // Strip markdown syntax from spoken audio for clean audio output
+      const cleanText = text.replace(/[*#`_\-]/g, "").trim();
+      utterance.text = cleanText;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const toggleListening = () => {
+    if (!speechSupported || !recognitionRef.current) {
+      toast.error("Speech recognition is not supported on this browser.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      try {
+        recognitionRef.current.start();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  const toggleTTS = () => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      toast.error("Text-to-speech is not supported on this browser.");
+      return;
+    }
+
+    const nextState = !ttsEnabled;
+    setTtsEnabled(nextState);
+    if (nextState) {
+      toast.success("Text-to-speech enabled. AI will speak responses.");
+    } else {
+      window.speechSynthesis.cancel();
+      toast.info("Text-to-speech muted.");
+    }
+  };
+
   const handleClearChat = () => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     setMessages([
       {
         role: "assistant",
@@ -133,19 +242,35 @@ export default function ChatView() {
               <h3 className="text-xs font-bold leading-none text-foreground">Semantic Analytics Chat</h3>
               <span className="text-[10px] text-emerald-500 flex items-center gap-1 mt-1 leading-none font-semibold">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Context synced
+                Voice Enabled
               </span>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleClearChat}
-            disabled={loading}
-            className="h-8 text-xs hover:bg-destructive/10 hover:text-destructive"
-          >
-            Clear Thread
-          </Button>
+          
+          <div className="flex items-center gap-2">
+            {/* TTS Speaker Toggler */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTTS}
+              className={`h-8 w-8 rounded-lg transition-colors ${
+                ttsEnabled ? "text-purple-500 bg-purple-500/10 hover:bg-purple-500/20" : "text-muted-foreground hover:text-foreground"
+              }`}
+              title={ttsEnabled ? "Mute responses" : "Read responses aloud"}
+            >
+              {ttsEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearChat}
+              disabled={loading}
+              className="h-8 text-xs hover:bg-destructive/10 hover:text-destructive"
+            >
+              Clear Thread
+            </Button>
+          </div>
         </div>
 
         {/* Scrollable messages container */}
@@ -213,20 +338,51 @@ export default function ChatView() {
         </div>
 
         {/* Input box */}
-        <div className="p-4 border-t border-border/20 bg-background shrink-0">
+        <div className="p-4 border-t border-border/20 bg-background shrink-0 space-y-2">
+          {/* Real-time transcript display when listening */}
+          {isListening && (
+            <div className="px-3 py-2 rounded-xl bg-purple-500/5 border border-purple-500/10 text-[11px] text-purple-600 dark:text-purple-400 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {/* Listening wave indicators */}
+                <div className="flex items-center gap-0.5 h-3">
+                  <span className="w-0.5 h-1.5 bg-purple-500 rounded animate-[bounce_0.6s_infinite_alternate]" />
+                  <span className="w-0.5 h-2.5 bg-indigo-500 rounded animate-[bounce_0.6s_150ms_infinite_alternate]" />
+                  <span className="w-0.5 h-1.5 bg-purple-500 rounded animate-[bounce_0.6s_300ms_infinite_alternate]" />
+                </div>
+                <span>Listening: <span className="italic text-foreground">"{input || "Speak now..."}"</span></span>
+              </div>
+              <span className="text-[9px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded uppercase">Web Speech API</span>
+            </div>
+          )}
+
           <form
             onSubmit={(e) => { e.preventDefault(); handleSend(); }}
             className="flex items-center gap-3"
           >
+            {/* Voice Assistant Mic Button */}
+            <Button
+              type="button"
+              onClick={toggleListening}
+              className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 shadow-md ${
+                isListening
+                  ? "bg-red-500 text-white hover:bg-red-600 animate-pulse border-none"
+                  : "bg-muted/40 text-muted-foreground border border-border/40 hover:bg-muted/80 hover:text-foreground"
+              }`}
+              title={isListening ? "Stop listening" : "Start voice assistant query"}
+            >
+              {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+            </Button>
+
             <input
               ref={inputRef}
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask anything about the customer reviews in the database..."
+              placeholder={isListening ? "Listening to spoken query..." : "Ask anything about the customer reviews in the database..."}
               disabled={loading}
               className="flex-1 h-11 px-4 text-xs bg-muted/40 border border-border/40 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/50 disabled:opacity-50 transition-all placeholder:text-muted-foreground/50"
             />
+            
             <Button
               type="submit"
               disabled={!input.trim() || loading}
